@@ -1,12 +1,33 @@
 #!/bin/bash
 
-# Secure WireGuard server installer for Debian, Ubuntu, CentOS, Fedora and Arch Linux
-# https://github.com/angristan/wireguard-install
+# NOTE: This may be broken 
+echo "NOTE: This may be broken"
+
+# Secure WireGuard server installer for Debian, Ubuntu, CentOS, Fedora Arch Linux AND now FreeBSD 
+# based on the original work of agriston (https://github.com/angristan/wireguard-install)
+
+# Modified for FreeBSD bare metal or cloud by Nestor Wheelock (https://github.com/nestorwheelock/wireguard-install)
+# To install Wireguard in a FreeBSD jail (and to have very good jail management tools) it is recommended to start 
+# the deployment with CBSD.  
+
+# Adguard DNS for "Default" servers
+# For "Family Protection" use 94.140.14.15, 94.140.15.16 and 2a10:50c0::bad1:ff, 2a10:50c0::bad2:ff
+DNS1_IPV4_SERVER="94.140.14.14"
+DNS2_IPV4_SERVER="94.140.15.15"
+DNS1_IPV6_SERVER="2a10:50c0::ad1:ff"
+DNS2_IPV6_SERVER="2a10:50c0::ad2:ff"
+
+WG_IPV4_NET="10.66.66.1"
+WG_IPV6_NET="fd42:42:42::1"
+PORT_RANGE="50000-65535"
 
 function isRoot() {
 	if [ "${EUID}" -ne 0 ]; then
-		echo "You need to run this script as root"
-		exit 1
+		echo "You need to run this script as root or:" 1>$2
+		if [ ! sudo -v COMMAND $> /dev/null ]; then
+			exit 1
+		fi
+		echo "\$ sudo $0"
 	fi
 }
 
@@ -45,8 +66,12 @@ function checkOS() {
 		OS=centos
 	elif [[ -e /etc/arch-release ]]; then
 		OS=arch
+	# Check for FreeBSD. Version 12.2 introduced the /etc/os-release standard for compatibility. See https://github.com/freebsd/freebsd/commit/95d96b8665911729f213da3883c12edd81903aba
+	elif [[ -e /etc/freebsd-update.conf ]]; then
+		source /etc/os-release
+		OS="${ID}"		
 	else
-		echo "Looks like you aren't running this installer on a Debian, Ubuntu, Fedora, CentOS or Arch Linux system"
+		echo "Looks like you aren't running this installer on a Debian, Ubuntu, Fedora, CentOS Arch Linux, or a FreeBSD system"
 		exit 1
 	fi
 }
@@ -64,49 +89,90 @@ function installQuestions() {
 	echo "I need to ask you a few questions before starting the setup."
 	echo "You can leave the default options and just press enter if you are ok with them."
 	echo ""
-
-	# Detect public IPv4 or IPv6 address and pre-fill for the user
-	SERVER_PUB_IP=$(ip -4 addr | sed -ne 's|^.* inet \([^/]*\)/.* scope global.*$|\1|p' | head -1)
-	if [[ -z ${SERVER_PUB_IP} ]]; then
+	if [[ ${OS} == "debian" || ${OS} == "rasbian" || ${OS} == "fedora" || ${OS} == "centos" || ${OS} == "arch" ]]; then
+		# Detect public IPv4 or IPv6 address and pre-fill for the user
+		SERVER_PUB_IP=$(ip -4 addr | sed -ne 's|^.* inet \([^/]*\)/.* scope global.*$|\1|p' | head -1)
+		if [[ -z ${SERVER_PUB_IP} ]]; then
 		# Detect public IPv6 address
-		SERVER_PUB_IP=$(ip -6 addr | sed -ne 's|^.* inet6 \([^/]*\)/.* scope global.*$|\1|p' | head -1)
-	fi
-	read -rp "IPv4 or IPv6 public address: " -e -i "${SERVER_PUB_IP}" SERVER_PUB_IP
-
-	# Detect public interface and pre-fill for the user
-	SERVER_NIC="$(ip -4 route ls | grep default | grep -Po '(?<=dev )(\S+)' | head -1)"
-	until [[ ${SERVER_PUB_NIC} =~ ^[a-zA-Z0-9_]+$ ]]; do
-		read -rp "Public interface: " -e -i "${SERVER_NIC}" SERVER_PUB_NIC
-	done
-
-	until [[ ${SERVER_WG_NIC} =~ ^[a-zA-Z0-9_]+$ && ${#SERVER_WG_NIC} -lt 16 ]]; do
-		read -rp "WireGuard interface name: " -e -i wg0 SERVER_WG_NIC
-	done
-
-	until [[ ${SERVER_WG_IPV4} =~ ^([0-9]{1,3}\.){3} ]]; do
-		read -rp "Server's WireGuard IPv4: " -e -i 10.66.66.1 SERVER_WG_IPV4
-	done
-
-	until [[ ${SERVER_WG_IPV6} =~ ^([a-f0-9]{1,4}:){3,4}: ]]; do
-		read -rp "Server's WireGuard IPv6: " -e -i fd42:42:42::1 SERVER_WG_IPV6
-	done
-
-	# Generate random number within private ports range
-	RANDOM_PORT=$(shuf -i49152-65535 -n1)
-	until [[ ${SERVER_PORT} =~ ^[0-9]+$ ]] && [ "${SERVER_PORT}" -ge 1 ] && [ "${SERVER_PORT}" -le 65535 ]; do
-		read -rp "Server's WireGuard port [1-65535]: " -e -i "${RANDOM_PORT}" SERVER_PORT
-	done
-
-	# Adguard DNS by default
-	until [[ ${CLIENT_DNS_1} =~ ^((25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$ ]]; do
-		read -rp "First DNS resolver to use for the clients: " -e -i 176.103.130.130 CLIENT_DNS_1
-	done
-	until [[ ${CLIENT_DNS_2} =~ ^((25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$ ]]; do
-		read -rp "Second DNS resolver to use for the clients (optional): " -e -i 176.103.130.131 CLIENT_DNS_2
-		if [[ ${CLIENT_DNS_2} == "" ]]; then
-			CLIENT_DNS_2="${CLIENT_DNS_1}"
+			SERVER_PUB_IP=$(ip -6 addr | sed -ne 's|^.* inet6 \([^/]*\)/.* scope global.*$|\1|p' | head -1)
 		fi
-	done
+		read -rp "IPv4 or IPv6 public address: " -e -i "${SERVER_PUB_IP}" SERVER_PUB_IP
+
+		# Detect public interface and pre-fill for the user
+		SERVER_NIC="$(ip -4 route ls | grep default | grep -Po '(?<=dev )(\S+)' | head -1)"
+		until [[ ${SERVER_PUB_NIC} =~ ^[a-zA-Z0-9_]+$ ]]; do
+			read -rp "Public interface: " -e -i "${SERVER_NIC}" SERVER_PUB_NIC
+		done
+	
+		until [[ ${SERVER_WG_NIC} =~ ^[a-zA-Z0-9_]+$ && ${#SERVER_WG_NIC} -lt 16 ]]; do
+			read -rp "WireGuard interface name: " -e -i wg0 SERVER_WG_NIC
+		done
+
+		until [[ ${SERVER_WG_IPV4} =~ ^([0-9]{1,3}\.){3} ]]; do
+			read -rp "Server's WireGuard IPv4: " -e -i "${WG_IPV4_NET}" SERVER_WG_IPV4
+		done
+
+		until [[ ${SERVER_WG_IPV6} =~ ^([a-f0-9]{1,4}:){3,4}: ]]; do
+			read -rp "Server's WireGuard IPv6: " -e -i "${WG_IPV6_NET}" SERVER_WG_IPV6
+		done
+
+		# Generate random number within private ports range
+		RANDOM_PORT=$(shuf -i"${PORT_RANGE}" -n1)
+		until [[ ${SERVER_PORT} =~ ^[0-9]+$ ]] && [ "${SERVER_PORT}" -ge 1 ] && [ "${SERVER_PORT}" -le 65535 ]; do
+			read -rp "Server's WireGuard port [1-65535]: " -e -i "${RANDOM_PORT}" SERVER_PORT
+		done
+
+		until [[ ${CLIENT_DNS_1} =~ ^((25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$ ]]; do
+			read -rp "First DNS resolver to use for the clients: " -e -i "${DNS1_SERVER}" CLIENT_DNS_1
+		done
+		until [[ ${CLIENT_DNS_2} =~ ^((25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$ ]]; do
+			read -rp "Second DNS resolver to use for the clients (optional): " -e -i "${DNS2_SERVER}" CLIENT_DNS_2
+			if [[ ${CLIENT_DNS_2} == "" ]]; then
+				CLIENT_DNS_2="${CLIENT_DNS_1}"
+			fi
+		done
+
+	elif [[ ${OS} == "freebsd" ]]; then
+		# Let's get curl if we don't have it already installed.
+		if [[ ! curl -v COMMAND $> /dev/null ]]; then
+			pkg install -y curl
+		fi
+		# Detect public IPv4 using ipify API. I'll mess with IPv6 when my ISP has it available.
+		SERVER_PUB_IP=$(curl -s https://api.ipify.org)
+		read -rp "IPv4: " -e -i "${SERVER_PUB_IP}" SERVER_PUB_IP
+		# Detect public interface and pre-fill for the user
+		SERVER_NIC=$(ifconfig | grep -B3 "${SERVER_PUB_IP}" | grep "flags" | awk '{ FS=":" } { print $1 }')
+		until [[ ${SERVER_PUB_NIC} =~ ^[a-zA-Z0-9_]+$ ]]; do
+			read -rp "Public interface: " -e -i "${SERVER_NIC}" SERVER_PUB_NIC
+		done
+	
+		until [[ ${SERVER_WG_NIC} =~ ^[a-zA-Z0-9_]+$ && ${#SERVER_WG_NIC} -lt 16 ]]; do
+			read -rp "WireGuard interface name: " -e -i wg0 SERVER_WG_NIC
+		done
+		until [[ ${SERVER_WG_IPV4} =~ ^([0-9]{1,3}\.){3} ]]; do
+			read -rp "Server's WireGuard IPv4: " -e -i "${WG_IPV4_NET}" SERVER_WG_IPV4
+		done
+
+		until [[ ${SERVER_WG_IPV6} =~ ^([a-f0-9]{1,4}:){3,4}: ]]; do
+			read -rp "Server's WireGuard IPv6: " -e -i "${WG_IPV6_NET}" SERVER_WG_IPV6
+		done
+
+		# Generate random number within private ports range.  Modified not to conflict with my own private port range.
+		RANDOM_PORT=$(shuf -i"${PORT_RANGE}" -n1)
+		until [[ ${SERVER_PORT} =~ ^[0-9]+$ ]] && [ "${SERVER_PORT}" -ge 1 ] && [ "${SERVER_PORT}" -le 65535 ]; do
+			read -rp "Server's WireGuard port [40000-65535]: " -e -i "${RANDOM_PORT}" SERVER_PORT
+		done
+
+		until [[ ${CLIENT_DNS_1} =~ ^((25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$ ]]; do
+			read -rp "First DNS resolver to use for the clients: " -e -i $DNS1_SERVER CLIENT_DNS_1
+		done
+		until [[ ${CLIENT_DNS_2} =~ ^((25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$ ]]; do
+			read -rp "Second DNS resolver to use for the clients (optional): " -e -i DNS2_SERVER CLIENT_DNS_2
+			if [[ ${CLIENT_DNS_2} == "" ]]; then
+				CLIENT_DNS_2="${CLIENT_DNS_1}"
+			fi
+		done
+	fi
 
 	echo ""
 	echo "Okay, that was all I needed. We are ready to setup your WireGuard server now."
@@ -152,6 +218,10 @@ function installWireGuard() {
 			pacman -S --noconfirm linux-headers
 		fi
 		pacman -S --noconfirm wireguard-tools iptables qrencode
+	elif [[ ${OS} == 'freebsd' ]]; then
+		pkg install -y 
+		sysrc gateway_enabled="YES"
+		sysrc wireguard_enable="YES"
 	fi
 
 	# Make sure the directory exists (this does not seem the be the case on fedora)
