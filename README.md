@@ -23,6 +23,13 @@ Supported distributions:
 - Arch Linux
 - FreeBSD >=12.2
 
+## Install prerequisites on Debian/Ubuntu Linux
+
+```bash
+apt-get update
+apt-get install linux-image-amd64 linux-headers-amd64 -y && reboot
+apt-get update && apt-get --fix-missing upgrade -y && apt-get --with-new-pkgs upgrade -y && apt-get update && apt-get   install curl git libmnl-dev libelf-dev linux-headers-$(uname -r) build-essential pkg-config lsb-release iptables libmnl-dev   libelf-dev linux-headers-$(uname -r) build-essential pkg-config libmnl-dev libelf-dev linux-headers-$(uname -r) build-essential pkg-config -y && apt-get update && apt-get --fix-missing upgrade -y && apt-get --with-new-pkgs upgrade -y && apt-get autoremove && apt-get clean && reboot
+```
 ## Usage
 
 Download and execute the script. Answer the questions asked by the script and it will take care of the rest.
