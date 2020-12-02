@@ -3,7 +3,7 @@
 ![Lint](https://github.com/angristan/wireguard-install/workflows/Lint/badge.svg)
 ![visitors](https://visitor-badge.glitch.me/badge?page_id=angristan.wireguard-install)
 
-**This project is a bash script that aims to setup a [WireGuard](https://www.wireguard.com/) VPN on a Linux server, as easily as possible!**
+**This project is a bash script that aims to setup a [WireGuard](https://www.wireguard.com/) VPN on a Linux or FreeBSD server, as easily as possible!**
 
 WireGuard is a point-to-point VPN that can be used in different ways. Here, we mean a VPN as in: the client will forward all its traffic trough an encrypted tunnel to the server.
 The server will apply NAT to the client's traffic so it will appear as if the client is browsing the web with the server's IP.
@@ -21,13 +21,14 @@ Supported distributions:
 - Fedora
 - CentOS
 - Arch Linux
+- FreeBSD >=12.2
 
 ## Usage
 
 Download and execute the script. Answer the questions asked by the script and it will take care of the rest.
 
 ```bash
-curl -O https://raw.githubusercontent.com/angristan/wireguard-install/master/wireguard-install.sh
+curl -O https://raw.githubusercontent.com/nestorwheelock/wireguard-install/master/wireguard-install.sh
 chmod +x wireguard-install.sh
 ./wireguard-install.sh
 ```
@@ -44,3 +45,6 @@ I recommend these cheap cloud providers for your VPN server:
 - [Hetzner](https://hetzner.cloud/?ref=ywtlvZsjgeDq): Germany and Finland, IPv6, 20 TB of traffic, starting at €3/month
 - [Digital Ocean](https://goo.gl/qXrNLK): Worldwide locations, IPv6 support, starting at \$5/month
 - [PulseHeberg](https://goo.gl/76yqW5): France, unlimited bandwidth, starting at €3/month
+
+For bare metal installation on Linux any of the supported distros should work.
+For bare metal or in jailed installation on FreeBSD it is not a bad idea to explore the jail management wrapper and DevOps tool, CBSD (https://github.com/cbsd/cbsd)
